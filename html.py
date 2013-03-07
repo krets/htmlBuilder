@@ -17,6 +17,9 @@ class Element(object):
 						'name',
 						'type',
 						'class',
+						'href',
+						'source',
+						'rel',
 					  ]
 
 	def __init__(self, tagName, content=None, parent=None, selfClosing=False, id=None):
@@ -32,16 +35,55 @@ class Element(object):
 
 	def setClass(self, className):
 		self.classes = [str(className)]
+
 	def addClass(self, className):
-		className = str(className)
-		if className not in self.classes:
-			self.classes.append(className)
+		if type(className) == list:
+			classes = className
+		else:
+			classes = [className]
+		for className in classes:
+			className = str(className)
+			if className not in self.classes:
+				self.classes.append(className)
 	def removedClass(self, className):
 		className = str(className)
 		while className in self.classes:
 			self.classes.remove(className)
 	def getClassStr(self):
 		return " ".join(self.classes)
+
+	def setParent(self, parent):
+		if type(parent)!=Element:
+			raise TypeError("parent must be object of Element type.")
+		if self.parent != None:
+			self.parent.removeChild(self)
+		self.parent = parent
+		self.parent.addChild(self)
+
+	def removeParent(self):
+		if self.parent != None:
+			self.parent.removeChild(self)
+		self.parent = None
+
+	def addElement(self,*args,**kwargs):
+		return self.addChild(Element(*args,**kwargs))
+
+	def addTable(self,*args,**kwargs):
+		return self.addChild(HtmlTable(*args,**kwargs))
+
+	def addChild(self,child):
+		if type(child) not in [Element, HtmlTable, Style, str]:
+			raise TypeError("child must be of the Element, Style or str type, not %s" % type(child).__name__)
+		self.children.append(child)
+		return child
+
+	def removeChild(self,child):
+		for x in self.children:
+			if x == child:
+				x.removeParent()
+			self.children.remove(x)
+	def empty(self):
+		self.children = []
 
 	def getContent(self,level):
 		returnStr = ''
@@ -52,7 +94,7 @@ class Element(object):
 				childStr = child.__str__(level+1)
 				if childStr==None:
 					raise TypeError("child(%s) %s is none", (type(child).__name__, child))
-				returnStr+=child.__str__(level+1)
+				returnStr+=childStr
 		return returnStr
 
 	def __str__(self,level=0):
@@ -73,32 +115,6 @@ class Element(object):
 			returnString += '%s</%s>\n' % ("    "*level, self.tag)
 		return returnString
 
-	def setParent(self, parent):
-		if type(parent)!=Element:
-			raise TypeError("parent must be object of Element type.")
-		if self.parent != None:
-			self.parent.removeChild(self)
-		self.parent = parent
-		self.parent.addChild(self)
-
-	def removeParent(self):
-		if self.parent != None:
-			self.parent.removeChild(self)
-		self.parent = None
-
-	def addChild(self,child):
-		if type(child) not in [Element, HtmlTable, Style, str]:
-			raise TypeError("child must be of the Element, Style or str type.")
-		self.children.append(child)
-		return child
-
-	def removeChild(self,child):
-		for x in self.children:
-			if x == child:
-				x.removeParent()
-			self.children.remove(x)
-	def empty(self):
-		self.children = []
 
 	def __getattr__(self, attr):
 		if attr=='class':
@@ -122,15 +138,18 @@ class HtmlTable(Element):
 	"""
 	def __init__(self, *args, **kwargs):
 		super(HtmlTable, self).__init__("table",*args, **kwargs)
-		self.thead = self.addChild(Element('thead'))
+		#self.thead = self.addChild(Element('thead'))
 		self.tbody = self.addChild(Element('tbody'))
 		self.rows = []
 		self.elementClasses = []
 		self.elementIds = []
 		self.rowClasses = []
 		self.rowIds = []
+		self.colClasses = []
+
 	def addRow(self,rowList=[]):
 		self.rows.append(rowList)
+		return len(self.rows)-1
 
 	def setMatrix(self, matrix):
 		# Accepts list of lists
@@ -139,22 +158,48 @@ class HtmlTable(Element):
 		else:
 			raise TypeError("matrix must be of type list.")
 		return matrix
+
 	def addCellClass(self,rowNum,colNum,className):
 		self.elementClasses.append((rowNum,colNum,className))
 
+	def setCellClass(self,rowNum,colNum,className):
+		for i,en in enumerate(self.elementClasses):
+			if en[0]==rowNum and en[1]==colNum:
+				self.elementClasses.remove(i)
+		self.addCellClass(rowNum,colNum,className)
+
 	def addRowClass(self,rowNum,className):
-		self.rowClasses.append((rowNum,className))
+		if type(rowNum) == list:
+			rows = rowNum
+		else:
+			rows = [rowNum]
+		for rowNum in rows:
+			self.rowClasses.append((rowNum,className))
 
 	def setRowClass(self,rowNum,className):
 		for i,en in enumerate(self.rowClasses):
 			if en[0]==rowNum:
 				self.rowClasses.remove(i)
 		self.addRowClass(rowNum,className)
-	def setCellClass(self,rowNum,colNum,className):
-		for i,en in enumerate(self.elementClasses):
-			if en[0]==rowNum and en[1]==colNum:
-				self.elementClasses.remove(i)
-		self.addCellClass(rowNum,colNum,className)
+
+	def addColClass(self,colNum,className):
+		if type(colNum) == list:
+			cols = colNum
+		else:
+			cols = [colNum]
+		for colNum in cols:
+			self.colClasses.append((colNum,className))
+
+	def setColClass(self,colNum,className):
+		if type(colNum) == list:
+			cols = colNum
+		else:
+			cols = [colNum]
+		for colNum in cols:
+			for i,en in enumerate(self.colClasses):
+				if en[0]==colNum:
+					self.colClasses.remove(i)
+			self.addColClass(colNum,className)
 
 	def __str__(self,level=0):
 		self.tbody.empty()
@@ -169,7 +214,6 @@ class HtmlTable(Element):
 			tr = self.tbody.addChild(Element('tr'))
 			for i,en in enumerate(self.rowClasses):
 				if en[0]==rowNum:
-					sys.stderr.write("Adding class to row %s: %s\n" % (rowNum,en[1]))
 					tr.addClass(en[1])
 			for colNum in range(numCols):
 				td = None
@@ -181,11 +225,14 @@ class HtmlTable(Element):
 					td = content
 				else:
 					td = Element('td')
-					td.content = content
+					td.content = str(content)
 
 				for i,en in enumerate(self.elementClasses):
 					if en[0]==rowNum and en[1]==colNum:
 						td.addClass(en[2])
+				for i,en in enumerate(self.colClasses):
+					if en[0]==colNum:
+						td.addClass(en[1])
 				tr.addChild(td)
 		return super(HtmlTable, self).__str__(level)
 
@@ -201,7 +248,10 @@ class Style(object):
 		returnStr = ", ".join(self.names)
 		returnStr += "{"
 		for k,v in self.values.items():
-			returnStr+= " %s: %s;" % (k,v)
+			if type(v) not in [list,tuple]:
+				v = [v]
+			for x in v:
+				returnStr+= " %s: %s;" % (k,x)
 		returnStr += "}\n"
 		return returnStr
 
@@ -214,9 +264,28 @@ class Builder(object):
 		self.style = self.head.addChild(Element("style"))
 		self.style.type = "text/css"
 		self.body = self.html.addChild(Element("body"))
-		
+	def addLink(self,linkType,url):
+		link = self.head.addElement('link')
+		link.href=str(url)
+		link.type=str(linkType)
+		return link
+	def addJavaScriptLink(self,url):
+		link = self.addLink('text/javascript',url)
+	def addCSSLink(self,url):
+		link = self.addLink('text/css',url)
+		link.rel = 'stylesheet'
+	def addChild(self, *args, **kwargs):
+		return self.body.addChild(*args,**kwargs)
+	def addElement(self,*args, **kwargs):
+		return self.body.addElement(*args,**kwargs)
+	def addStyle(self,*args, **kwargs):
+		return self.style.addChild(Style(*args,**kwargs))
+	def addTable(self, *args, **kwargs):
+		return self.body.addTable(*args,**kwargs)
+	def createElement(self,*args, **kwargs):
+		return Element(*args,**kwargs)
 	def __str__(self):
-		return str(self.html)
+		return "<!DOCTYPE html>\n%s" % self.html
 
 
 def example():
@@ -225,32 +294,48 @@ def example():
 	"""
 	# HTML Creation
 	myPage = Builder(title="Test Page: Hello World 123")
-	mainDiv = myPage.body.addChild(Element("div","Hello World!", id="main"))
-	mainDiv.addChild(Element("hr", selfClosing=True))
-	mainDiv.addChild(Element("h1","Test Title"))
-	myTable = mainDiv.addChild(HtmlTable())
+	mainDiv = myPage.addElement("div","Hello World!", id="main")
+	mainDiv.addElement("hr", selfClosing=True)
+	mainDiv.addElement("h1","Test Title")
+	myTable = mainDiv.addTable()
+
+	specialTd = myPage.createElement('td',"S")
+	specialTd.addClass('special')
 
 	myData = [
 	['A','b','c','d'],
 	['e','F','g','h'],
 	['i','j','K','l'],
 	['m','n','o','P'],
-	['q','r',Element('td',"S"),'t','u'],
+	['q','r',specialTd,'t','u'],
 	['v','W','x','y','z'],
 	]
 
 	myTable.setMatrix(myData)
 	myTable.addRowClass(3,'red')
 	myTable.addCellClass(0,2,'awesome')
+	myTable.addColClass(4,'border')
 
 	# Style definitions
-	myPage.style.addChild(Style("body",{'font-family':'Helvetica, Arial, Sans-Serif'}))
-	myPage.style.addChild(Style("#main",{'border':'solid 1px grey'}))
-	myPage.style.addChild(Style(".red",{'background':'red!important'}))
-	myPage.style.addChild(Style(".awesome",{'border':'dotted goldenrod 3px'}))
-	myPage.style.addChild(Style("table",{'border-collapse':'collapse','width':'100%'}))
-	myPage.style.addChild(Style("td",{'padding':'4px','margin':'0px'}))
-	myPage.style.addChild(Style("tr:nth-child(even)",{'background':'#ddd'}))
+	myPage.addStyle("body",{'font-family':'Helvetica, Arial, Sans-Serif'})
+	myPage.addStyle("#main",{'border':'solid 1px grey'})
+	myPage.addStyle(".red",{'background':'red!important'})
+	myPage.addStyle(".awesome",{'border':'dotted goldenrod 3px'})
+	myPage.addStyle("table",{'border-collapse':'collapse','width':'100%'})
+	myPage.addStyle("td",{'padding':'4px','margin':'0px'})
+	myPage.addStyle("tr:nth-child(even)",{'background':'#ddd'})
+	myPage.addStyle(".border",{'border':'solid black 1px'})
+	
+	specialSyleDict = {
+		'background-color': '#f90',
+		'background-image':['linear-gradient(bottom left, red 20px, yellow, green, blue 90%)',
+							'-o-linear-gradient(bottom left, red 20px, yellow, green, blue 90%)',
+							'-moz-linear-gradient(bottom left, red 20px, yellow, green, blue 90%)',
+							'-webkit-linear-gradient(bottom left, red 20px, yellow, green, blue 90%)',
+							'-mz-linear-gradient(bottom left, red 20px, yellow, green, blue 90%)',
+							],
+		}
+	myPage.addStyle(".special",specialSyleDict)
 
 	# Calling the page as a string will render the html.
 	print myPage
